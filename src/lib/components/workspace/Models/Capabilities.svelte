@@ -2,6 +2,10 @@
 	import { getContext } from 'svelte';
 	import Checkbox from '$lib/components/common/Checkbox.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
+	import {
+		DEFAULT_REASONING_EFFORT_LEVELS,
+		normalizeReasoningEffortLevels
+	} from '$lib/utils/reasoning';
 	import { marked } from 'marked';
 
 	const i18n = getContext('i18n');
@@ -51,6 +55,10 @@
 			label: $i18n.t('Status Updates'),
 			description: $i18n.t('Displays status updates (e.g., web search progress) in the response')
 		},
+		reasoning_effort: {
+			label: $i18n.t('Reasoning Effort'),
+			description: $i18n.t('Allows users to choose how much effort the model spends reasoning')
+		},
 		memory: {
 			label: $i18n.t('Memory'),
 			description: $i18n.t('Inject stored memories into conversation context')
@@ -64,8 +72,16 @@
 	};
 
 	type Capability = keyof typeof capabilityLabels;
+	type Capabilities = Partial<Record<Exclude<Capability, 'reasoning_effort'>, boolean>> & {
+		reasoning_effort?: string[];
+	};
 
-	export let capabilities: Partial<Record<Capability, boolean>> = {};
+	const suggestedReasoningEffortLevels = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+
+	export let capabilities: Capabilities = {};
+
+	let reasoningEffortLevelsInput = '';
+	let serializedReasoningEffortLevels: string | null = null;
 
 	// Hide file_context when file_upload is disabled
 	$: visibleCapabilities = (Object.keys(capabilityLabels) as Capability[]).filter((cap) => {
@@ -74,25 +90,81 @@
 		}
 		return true;
 	});
+	$: reasoningEffortEnabled =
+		Array.isArray(capabilities.reasoning_effort) && capabilities.reasoning_effort.length > 0;
+	$: {
+		const levels = Array.isArray(capabilities.reasoning_effort)
+			? normalizeReasoningEffortLevels(capabilities.reasoning_effort)
+			: [];
+		const serializedLevels = levels.join(',');
+
+		if (serializedLevels !== serializedReasoningEffortLevels) {
+			reasoningEffortLevelsInput = levels.join(', ');
+			serializedReasoningEffortLevels = serializedLevels;
+		}
+	}
+
+	const setCapability = (capability: Capability, enabled: boolean) => {
+		if (capability === 'reasoning_effort') {
+			const currentLevels = normalizeReasoningEffortLevels(capabilities.reasoning_effort);
+			capabilities = {
+				...capabilities,
+				reasoning_effort: enabled
+					? currentLevels.length > 0
+						? currentLevels
+						: [...DEFAULT_REASONING_EFFORT_LEVELS]
+					: []
+			};
+			return;
+		}
+
+		capabilities = { ...capabilities, [capability]: enabled };
+	};
+
+	const saveReasoningEffortLevels = () => {
+		const levels = normalizeReasoningEffortLevels(reasoningEffortLevelsInput.split(','));
+		capabilities = { ...capabilities, reasoning_effort: levels };
+	};
 </script>
 
 <div>
 	<div class="mb-1.5 text-xs text-gray-400 dark:text-gray-600">{$i18n.t('Capabilities')}</div>
 	<div class="grid grid-cols-1 gap-x-5 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
 		{#each visibleCapabilities as capability}
-			<div class="flex min-h-6 items-center justify-between gap-2.5">
-				<div class="min-w-0 text-xs text-gray-600 dark:text-gray-400">
-					<Tooltip content={marked.parse(capabilityLabels[capability].description)}>
-						<span class="truncate">{$i18n.t(capabilityLabels[capability].label)}</span>
-					</Tooltip>
+			<div
+				class={capability === 'reasoning_effort' && reasoningEffortEnabled
+					? 'sm:col-span-2 lg:col-span-3'
+					: ''}
+			>
+				<div class="flex min-h-6 items-center justify-between gap-2.5">
+					<div class="min-w-0 text-xs text-gray-600 dark:text-gray-400">
+						<Tooltip content={marked.parse(capabilityLabels[capability].description)}>
+							<span class="truncate">{$i18n.t(capabilityLabels[capability].label)}</span>
+						</Tooltip>
+					</div>
+					<Checkbox
+						ariaLabel={$i18n.t(capabilityLabels[capability].label)}
+						state={capability === 'reasoning_effort' ? (reasoningEffortEnabled ? 'checked' : 'unchecked') : (capabilities[capability] ? 'checked' : 'unchecked')}
+						on:change={(e) => setCapability(capability, e.detail === 'checked')}
+					/>
 				</div>
-				<Checkbox
-					ariaLabel={$i18n.t(capabilityLabels[capability].label)}
-					state={capabilities[capability] ? 'checked' : 'unchecked'}
-					on:change={(e) => {
-						capabilities[capability] = e.detail === 'checked';
-					}}
-				/>
+
+				{#if capability === 'reasoning_effort' && reasoningEffortEnabled}
+					<label class="mt-1 block">
+						<span class="sr-only">{$i18n.t('Supported reasoning effort levels')}</span>
+						<input
+							class="w-full rounded-md border border-gray-100 bg-transparent px-2 py-1 text-xs text-gray-700 outline-hidden placeholder:text-gray-400 focus:border-gray-300 dark:border-gray-800 dark:text-gray-300 dark:placeholder:text-gray-600 dark:focus:border-gray-700"
+							type="text"
+							bind:value={reasoningEffortLevelsInput}
+							placeholder={$i18n.t('Supported levels (low, medium, high)')}
+							aria-describedby="reasoning-effort-levels-help"
+							on:change={saveReasoningEffortLevels}
+						/>
+					</label>
+					<p id="reasoning-effort-levels-help" class="mt-1 text-[11px] leading-tight text-gray-400 dark:text-gray-600">
+						{$i18n.t('Comma-separated, ordered levels. Suggested: {{levels}}', { levels: suggestedReasoningEffortLevels.join(', ') })}
+					</p>
+				{/if}
 			</div>
 		{/each}
 	</div>

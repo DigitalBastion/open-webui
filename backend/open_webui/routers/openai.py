@@ -692,6 +692,29 @@ async def get_all_models(request: Request, user: UserModel) -> dict[str, list]:
                             'urlIdx': idx,
                         }
 
+                        upstream_model_id = strip_provider_model_prefix(
+                            model_id, api_config.get('prefix_id')
+                        )
+                        reasoning_effort_levels = (
+                            get_openai_reasoning_effort_levels(upstream_model_id)
+                            if hostname == 'api.openai.com'
+                            else None
+                        )
+                        if reasoning_effort_levels:
+                            info = model.get('info') or {}
+                            meta = info.get('meta') or {}
+                            capabilities = meta.get('capabilities') or {}
+                            merged['info'] = {
+                                **info,
+                                'meta': {
+                                    **meta,
+                                    'capabilities': {
+                                        'reasoning_effort': reasoning_effort_levels,
+                                        **capabilities,
+                                    },
+                                },
+                            }
+
                         loaded = get_llamacpp_model_loaded_state(
                             model,
                             provider,
@@ -930,6 +953,32 @@ def is_openai_new_model(model: str) -> bool:
     if m and int(m.group(1)) >= 5:
         return True
     return False
+
+
+def get_openai_reasoning_effort_levels(model: str) -> list[str] | None:
+    """Return documented effort levels for known official OpenAI model families."""
+    model_lower = model.lower()
+    dated_suffix = r'(?:-\d{4}-\d{2}-\d{2})?'
+
+    if re.match(rf'^gpt-5\.2-pro{dated_suffix}$', model_lower):
+        return ['medium', 'high', 'xhigh']
+    if re.match(rf'^gpt-5\.2{dated_suffix}$', model_lower):
+        return ['none', 'low', 'medium', 'high', 'xhigh']
+    if re.match(rf'^gpt-5\.1{dated_suffix}$', model_lower):
+        return ['none', 'low', 'medium', 'high']
+    if re.match(rf'^gpt-5-pro{dated_suffix}$', model_lower):
+        return ['high']
+    if re.match(rf'^gpt-5(?:-(?:mini|nano))?{dated_suffix}$', model_lower):
+        return ['minimal', 'low', 'medium', 'high']
+    if re.match(rf'^o3-pro{dated_suffix}$', model_lower):
+        return ['high']
+    if re.match(rf'^o3(?:-mini)?{dated_suffix}$', model_lower):
+        return ['low', 'medium', 'high']
+    if re.match(rf'^o4-mini{dated_suffix}$', model_lower):
+        return ['low', 'medium', 'high']
+    if re.match(rf'^o1{dated_suffix}$', model_lower):
+        return ['low', 'medium', 'high']
+    return None
 
 
 def _sanitize_model_for_url(model: str) -> str:
