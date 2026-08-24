@@ -1142,6 +1142,20 @@ def convert_to_responses_payload(payload: dict) -> dict:
 
     responses_payload = {**payload, 'input': input_items}
 
+    # Translate the Chat Completions compatibility field to the canonical
+    # Responses API shape. Native Responses fields take precedence when both
+    # forms are present.
+    reasoning_effort = responses_payload.pop('reasoning_effort', None)
+    reasoning = responses_payload.get('reasoning')
+    if isinstance(reasoning_effort, str) and reasoning_effort:
+        if reasoning is None:
+            responses_payload['reasoning'] = {'effort': reasoning_effort}
+        elif isinstance(reasoning, dict) and 'effort' not in reasoning:
+            responses_payload['reasoning'] = {
+                **reasoning,
+                'effort': reasoning_effort,
+            }
+
     # Forward previous_response_id when the middleware has set it
     # (only used when ENABLE_RESPONSES_API_STATEFUL is enabled).
     previous_response_id = responses_payload.pop('previous_response_id', None)
