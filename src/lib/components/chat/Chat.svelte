@@ -67,6 +67,7 @@
 	import { AudioQueue } from '$lib/utils/audio';
 	import { createTemporaryChatId, isTemporaryChatId } from '$lib/utils/chatId';
 	import { applyResponseStreamEvent, getOutputText } from './Messages/structuredOutput';
+	import { getReasoningEffortRequestParams } from '$lib/utils/reasoning';
 
 	import {
 		archiveChatById,
@@ -3545,17 +3546,22 @@
 		const useChatVariablesFallback =
 			!_chatId || $temporaryChatEnabled || isTemporaryChatId(_chatId);
 
+		const requestParams = getReasoningEffortRequestParams(
+			{
+				...$settings?.params,
+				...params,
+				stop: getStopTokens()
+			},
+			model.info?.meta?.capabilities?.reasoning_effort
+		);
+
 		const res = await generateOpenAIChatCompletion(
 			localStorage.token,
 			{
 				stream: stream,
 				model: model.id,
 				...(messages.length > 0 ? { messages } : {}),
-				params: {
-					...$settings?.params,
-					...params,
-					stop: getStopTokens()
-				},
+				params: requestParams,
 
 				files: (files?.length ?? 0) > 0 ? files : undefined,
 
@@ -4429,6 +4435,7 @@
 										bind:selectedModels
 										bind:files
 										bind:prompt
+										bind:params
 										bind:autoScroll
 										bind:selectedToolIds
 										bind:selectedSkillIds
@@ -4521,6 +4528,7 @@
 										bind:selectedModels
 										bind:files
 										bind:prompt
+										bind:params
 										bind:autoScroll
 										bind:selectedToolIds
 										bind:selectedSkillIds
@@ -4581,6 +4589,7 @@
 									bind:messageInput
 									bind:files
 									bind:prompt
+									bind:params
 									bind:autoScroll
 									bind:selectedToolIds
 									bind:selectedSkillIds

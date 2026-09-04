@@ -107,6 +107,7 @@ export const SUPPORTED_FILE_EXTENSIONS = [
 ];
 
 export const DEFAULT_CAPABILITIES = {
+	reasoning_effort: [],
 	file_context: true,
 	vision: true,
 	file_upload: true,
